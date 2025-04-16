@@ -1,0 +1,70 @@
+name: Step 2, Create Custom Filters and Views
+
+# This step triggers when a comment containing "filters-created" is posted on an issue
+# This workflow updates from step 2 to step 3
+
+on:
+  workflow_dispatch:
+  issue_comment:
+    types:
+      - created
+
+permissions:
+  # Need `contents: read` to checkout the repository
+  # Need `contents: write` to update the step metadata
+  contents: write
+
+jobs:
+  # Get the current step to only run the main job when the learner is on the same step
+  get_current_step:
+    name: Check current step number
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - id: get_step
+        run: |
+          echo "current_step=$(cat ./.github/steps/-step.txt)" >> $GITHUB_OUTPUT
+    outputs:
+      current_step: ${{ steps.get_step.outputs.current_step }}
+
+  on_filters_created_comment:
+    name: On filters-created comment
+    needs: get_current_step
+
+    # We will only run this action when:
+    # 1. This repository isn't the template repository
+    # 2. The step is currently 2
+    # 3. The comment contains "filters-created"
+    if: >-
+      ${{ !github.event.repository.is_template
+          && needs.get_current_step.outputs.current_step == 2
+          && contains(github.event.comment.body, 'filters-created') }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Let's get all the branches
+
+      # Create milestone for the subscription part
+      - name: Create milestone
+        run: |
+          gh api --method POST \
+            repos/${{ github.repository }}/milestones \
+            -f title="Version 1.0" \
+            -f description="Our first release milestone" \
+            -f state="open"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Update to step 3
+      - name: Update to step 3
+        uses: skills/action-update-step@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          from_step: 2
+          to_step: 3
+
